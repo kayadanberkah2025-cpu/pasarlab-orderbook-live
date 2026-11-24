@@ -1,0 +1,698 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090e18">
+  <title>PasarLab | Order Book</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #090e18;
+      color: #e7edf7;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      --panel: #111a28;
+      --panel-soft: #0e1623;
+      --line: #202c3e;
+      --muted: #8290a5;
+      --green: #2bd49a;
+      --red: #ff657a;
+      --blue: #70a7ff;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background:
+        radial-gradient(ellipse at 70% -20%, rgba(52, 94, 157, .2), transparent 42%),
+        var(--background, #090e18);
+    }
+
+    button, select { font: inherit; }
+
+    .shell { max-width: 1440px; margin: 0 auto; padding: 28px 24px 48px; }
+
+    .topbar, .title-row, .panel-heading, .controls, .metric-label, .side-heading {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    .brand { display: flex; align-items: center; gap: 11px; }
+    .brand-mark {
+      display: grid;
+      width: 34px;
+      height: 34px;
+      place-items: center;
+      border: 1px solid #33547e;
+      border-radius: 10px;
+      background: #162943;
+      color: #9dc4ff;
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .brand-name { font-size: 14px; font-weight: 750; letter-spacing: .02em; }
+    .brand-caption { margin-top: 2px; color: var(--muted); font-size: 11px; }
+
+    .connection {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 11px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(17, 26, 40, .78);
+      color: #abb8ca;
+      font-size: 12px;
+      white-space: nowrap;
+    }
+    .status-dot { width: 7px; height: 7px; border-radius: 50%; background: #f0ad4e; }
+    .connection[data-state="live"] { border-color: #1d5e4d; color: #91e8c9; }
+    .connection[data-state="live"] .status-dot { background: var(--green); box-shadow: 0 0 12px rgba(43, 212, 154, .7); }
+    .connection[data-state="error"] { border-color: #71404d; color: #ffa4b1; }
+    .connection[data-state="error"] .status-dot { background: var(--red); }
+
+    .title-row { align-items: end; margin: 36px 0 20px; }
+    h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); letter-spacing: -.04em; }
+    .subtitle { margin: 7px 0 0; color: var(--muted); font-size: 13px; }
+
+    .controls { flex-wrap: wrap; justify-content: flex-end; }
+    .control {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: var(--panel);
+      color: var(--muted);
+      font-size: 12px;
+    }
+    select {
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: #e7edf7;
+      cursor: pointer;
+    }
+    option { background: var(--panel); }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 16px;
+    }
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: linear-gradient(155deg, rgba(20, 31, 47, .98), rgba(15, 23, 36, .98));
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+    }
+    .metric { min-height: 88px; padding: 15px 16px; }
+    .metric-label { justify-content: flex-start; color: var(--muted); font-size: 11px; }
+    .metric-value { margin-top: 9px; font-size: 20px; font-weight: 700; letter-spacing: -.03em; }
+    .metric-sub { margin-top: 4px; color: var(--muted); font-size: 11px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+
+    .main-grid { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(320px, .95fr); gap: 16px; }
+    .panel { overflow: hidden; }
+    .panel-heading { min-height: 54px; padding: 0 16px; border-bottom: 1px solid var(--line); }
+    .panel-title { font-size: 13px; font-weight: 700; }
+    .panel-note { color: var(--muted); font-size: 11px; }
+    .exchange-tag {
+      padding: 5px 8px;
+      border: 1px solid #253951;
+      border-radius: 6px;
+      color: #9cb9dc;
+      font-size: 10px;
+      letter-spacing: .03em;
+    }
+
+    .book-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); }
+    .book-side { min-width: 0; padding: 12px 14px 14px; background: var(--panel-soft); }
+    .side-heading { margin: 0 0 10px; font-size: 11px; }
+    .side-heading span:last-child { color: var(--muted); font-weight: 500; }
+    .asks .side-heading { color: var(--red); }
+    .bids .side-heading { color: var(--green); }
+    .table-head, .book-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(72px, .75fr) minmax(72px, .85fr);
+      align-items: center;
+      gap: 8px;
+    }
+    .table-head { padding: 0 5px 8px; color: #74839a; font-size: 10px; }
+    .table-head span:nth-child(2), .table-head span:nth-child(3),
+    .book-row span:nth-child(2), .book-row span:nth-child(3) { text-align: right; }
+    .book-row {
+      position: relative;
+      min-height: 25px;
+      padding: 0 5px;
+      overflow: hidden;
+      border-radius: 4px;
+      font-variant-numeric: tabular-nums;
+      font-size: 11px;
+    }
+    .book-row::before {
+      position: absolute;
+      top: 2px;
+      bottom: 2px;
+      width: var(--bar, 0%);
+      border-radius: 3px;
+      content: "";
+      pointer-events: none;
+    }
+    .asks .book-row::before { right: 0; background: rgba(255, 101, 122, .12); }
+    .bids .book-row::before { right: 0; background: rgba(43, 212, 154, .12); }
+    .book-row span { position: relative; z-index: 1; }
+    .asks .price { color: #ff8191; }
+    .bids .price { color: #5de0b0; }
+    .center-price {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 19px;
+      border-top: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      background: #111a28;
+    }
+    .center-price strong { font-size: 18px; letter-spacing: -.02em; }
+    .center-price span { color: var(--muted); font-size: 11px; }
+
+    .chart-panel { margin-top: 16px; }
+    .chart-wrap { height: 245px; padding: 10px 12px 14px; }
+    canvas { display: block; width: 100%; height: 100%; }
+    .market-panel { margin-bottom: 16px; }
+    .market-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+    .market-table th, .market-table td { padding: 12px 14px; border-bottom: 1px solid rgba(32, 44, 62, .7); text-align: right; }
+    .market-table th { color: var(--muted); font-size: 10px; font-weight: 500; }
+    .market-table th:first-child, .market-table td:first-child { text-align: left; }
+    .market-name { display: flex; align-items: center; gap: 8px; }
+    .market-icon { display: grid; width: 22px; height: 22px; place-items: center; border-radius: 7px; background: #213246; color: #a4c9ff; font-size: 9px; font-weight: 800; }
+    .disclaimer { margin: 13px 2px 0; color: #738197; font-size: 11px; line-height: 1.6; }
+    .footer { margin-top: 22px; color: #6d7b90; font-size: 10px; line-height: 1.6; }
+    .empty { color: #77869c !important; }
+
+    @media (max-width: 900px) {
+      .main-grid { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 620px) {
+      .shell { padding: 18px 12px 32px; }
+      .title-row { align-items: start; flex-direction: column; margin-top: 28px; }
+      .controls { justify-content: flex-start; }
+      .metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+      .metric { min-height: 78px; padding: 12px; }
+      .metric-value { font-size: 17px; }
+      .book-side { padding: 10px 8px; }
+      .table-head, .book-row { grid-template-columns: minmax(0, 1fr) minmax(55px, .72fr) minmax(58px, .78fr); gap: 4px; }
+      .book-row { font-size: 10px; }
+      .center-price { padding: 10px 12px; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <div class="brand-name">PasarLab</div>
+          <div class="brand-caption">Market data workspace</div>
+        </div>
+      </div>
+      <div id="connection" class="connection" data-state="connecting" role="status" aria-live="polite">
+        <span class="status-dot" aria-hidden="true"></span>
+        <span id="connectionText">Menghubungkan ke Bybit…</span>
+      </div>
+    </header>
+
+    <section class="title-row">
+      <div>
+        <h1>Order Book <span id="titleSymbol">ETH</span></h1>
+        <p class="subtitle">Kedalaman pasar perpetual · snapshot dan pembaruan live</p>
+      </div>
+      <div class="controls">
+        <label class="control">Aset
+          <select id="symbol" aria-label="Pilih aset">
+            <option value="ETH">ETH / USDT</option>
+            <option value="BTC">BTC / USDT</option>
+            <option value="SOL">SOL / USDT</option>
+          </select>
+        </label>
+        <label class="control">Satuan
+          <select id="unit" aria-label="Pilih satuan tampilan">
+            <option value="coin">Coin</option>
+            <option value="usd">USD</option>
+          </select>
+        </label>
+        <span class="control">Kedalaman ±5%</span>
+      </div>
+    </section>
+
+    <section class="metrics" aria-label="Ringkasan order book">
+      <article class="metric">
+        <div class="metric-label">Harga tengah</div>
+        <div id="midPrice" class="metric-value empty">—</div>
+        <div id="lastUpdate" class="metric-sub">Menunggu snapshot</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Spread</div>
+        <div id="spread" class="metric-value empty">—</div>
+        <div id="spreadPct" class="metric-sub">—</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Kedalaman ±0,5%</div>
+        <div id="depthTotal" class="metric-value empty">—</div>
+        <div id="depthSplit" class="metric-sub">Bid — · Ask —</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Imbalance bid</div>
+        <div id="imbalance" class="metric-value empty">—</div>
+        <div class="metric-sub">Porsi bid dari total ±0,5%</div>
+      </article>
+    </section>
+
+    <div class="main-grid">
+      <section>
+        <article class="panel">
+          <div class="panel-heading">
+            <div>
+            <div id="marketTitle" class="panel-title">Order book ETHUSDT</div>
+              <div class="panel-note">20 level terdekat dari feed level 50</div>
+            </div>
+            <span class="exchange-tag">BYBIT · LINEAR</span>
+          </div>
+          <div class="book-columns">
+            <section class="book-side asks" aria-label="Ask atau order jual">
+              <h2 class="side-heading"><span>Ask · Jual</span><span id="askTotal">—</span></h2>
+              <div class="table-head"><span>Harga (USDT)</span><span>Jumlah</span><span>Total</span></div>
+              <div id="asks"></div>
+            </section>
+            <section class="book-side bids" aria-label="Bid atau order beli">
+              <h2 class="side-heading"><span>Bid · Beli</span><span id="bidTotal">—</span></h2>
+              <div class="table-head"><span>Harga (USDT)</span><span>Jumlah</span><span>Total</span></div>
+              <div id="bids"></div>
+            </section>
+          </div>
+          <div class="center-price">
+            <strong id="centerMid">—</strong>
+            <span>Mid price</span>
+          </div>
+        </article>
+
+        <article class="panel chart-panel">
+          <div class="panel-heading">
+            <div class="panel-title">Kedalaman kumulatif</div>
+            <div class="panel-note">Top 50 level · jendela harga ±5%</div>
+          </div>
+          <div class="chart-wrap"><canvas id="depthChart" aria-label="Grafik kedalaman order book"></canvas></div>
+        </article>
+      </section>
+
+      <aside>
+        <article class="panel market-panel">
+          <div class="panel-heading">
+            <div>
+              <div class="panel-title">Market matrix</div>
+              <div class="panel-note">Sumber yang sedang tersambung</div>
+            </div>
+          </div>
+          <table class="market-table">
+            <thead>
+              <tr><th>Market</th><th>Bid (USD)</th><th>Ask (USD)</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td><span class="market-name"><span class="market-icon">B</span>Bybit Linear</span></td>
+                <td id="matrixBid" class="positive">—</td>
+                <td id="matrixAsk" class="negative">—</td>
+              </tr>
+            </tbody>
+          </table>
+        </article>
+        <article class="panel">
+          <div class="panel-heading"><div class="panel-title">Tentang data</div></div>
+          <div style="padding: 14px 16px;">
+            <div class="panel-note">Feed publik Bybit V5 · linear perpetual · level 50</div>
+            <p class="disclaimer">
+              Tampilan ini memakai feed langsung Bybit untuk satu market; bukan agregasi semua exchange dan bukan data CoinGlass.
+              Jika koneksi tidak tersedia, status akan tetap menunjukkan kendala dan tidak menampilkan angka simulasi.
+            </p>
+            <p id="marketLabel" class="footer">ETHUSDT · pembaruan menunggu koneksi</p>
+          </div>
+        </article>
+      </aside>
+    </div>
+    <footer class="footer">Data pasar untuk informasi saja, bukan rekomendasi trading. Koneksi berjalan langsung dari browser ke endpoint WebSocket publik Bybit.</footer>
+  </main>
+
+  <script>
+    (() => {
+      const endpoint = "wss://stream.bybit.com/v5/public/linear";
+      const visibleLevels = 20;
+      const nearBandPct = 0.5;
+      const chartRangePct = 5;
+      const state = {
+        socket: null,
+        heartbeat: null,
+        connectTimer: null,
+        reconnectTimer: null,
+        reconnectDelay: 1000,
+        reconnectAttempt: 0,
+        bids: new Map(),
+        asks: new Map(),
+        lastUpdate: 0,
+      };
+
+      const byId = (id) => document.getElementById(id);
+      const symbolInput = byId("symbol");
+      const unitInput = byId("unit");
+
+      function setStatus(stateName, text) {
+        byId("connection").dataset.state = stateName;
+        byId("connectionText").textContent = text;
+      }
+
+      function formatPrice(value) {
+        return new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 2,
+          maximumFractionDigits: value < 1 ? 5 : 2,
+        }).format(value);
+      }
+
+      function formatQuantity(value) {
+        return new Intl.NumberFormat("en-US", {
+          minimumFractionDigits: 0,
+          maximumFractionDigits: 4,
+        }).format(value);
+      }
+
+      function formatUsd(value) {
+        return new Intl.NumberFormat("en-US", {
+          style: "currency",
+          currency: "USD",
+          maximumFractionDigits: 0,
+        }).format(value);
+      }
+
+      function formatAmount(price, quantity) {
+        return unitInput.value === "usd" ? formatUsd(price * quantity) : formatQuantity(quantity);
+      }
+
+      function sortedLevels(book, side) {
+        return [...book.entries()]
+          .map(([price, quantity]) => [Number(price), quantity])
+          .filter(([price, quantity]) => Number.isFinite(price) && Number.isFinite(quantity) && quantity > 0)
+          .sort((a, b) => side === "bid" ? b[0] - a[0] : a[0] - b[0]);
+      }
+
+      function applyUpdates(book, entries) {
+        for (const [priceText, quantityText] of entries || []) {
+          const price = Number(priceText);
+          const quantity = Number(quantityText);
+          if (!Number.isFinite(price) || !Number.isFinite(quantity)) continue;
+          if (quantity === 0) book.delete(price);
+          else book.set(price, quantity);
+        }
+      }
+
+      function clearBook() {
+        state.bids.clear();
+        state.asks.clear();
+        state.lastUpdate = 0;
+        render();
+      }
+
+      function renderSide(target, levels, color) {
+        const rows = levels.slice(0, visibleLevels);
+        const maxValue = Math.max(1, ...rows.map(([price, quantity]) => price * quantity));
+        let cumulative = 0;
+        const fragment = document.createDocumentFragment();
+
+        for (const [price, quantity] of rows) {
+          const value = price * quantity;
+          cumulative += value;
+          const row = document.createElement("div");
+          row.className = "book-row";
+          row.style.setProperty("--bar", `${Math.max(3, value / maxValue * 100)}%`);
+          const priceCell = document.createElement("span");
+          priceCell.className = "price";
+          priceCell.textContent = formatPrice(price);
+          const amountCell = document.createElement("span");
+          amountCell.textContent = formatAmount(price, quantity);
+          const totalCell = document.createElement("span");
+          totalCell.textContent = unitInput.value === "usd" ? formatUsd(cumulative) : formatQuantity(cumulative / price);
+          row.append(priceCell, amountCell, totalCell);
+          fragment.append(row);
+        }
+
+        if (!rows.length) {
+          const empty = document.createElement("div");
+          empty.className = "book-row empty";
+          empty.textContent = "Menunggu data live";
+          fragment.append(empty);
+        }
+        target.replaceChildren(fragment);
+        return rows.reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+      }
+
+      function drawDepth(bids, asks, mid) {
+        const canvas = byId("depthChart");
+        const rect = canvas.getBoundingClientRect();
+        if (!rect.width || !rect.height) return;
+        const ratio = window.devicePixelRatio || 1;
+        canvas.width = Math.round(rect.width * ratio);
+        canvas.height = Math.round(rect.height * ratio);
+        const ctx = canvas.getContext("2d");
+        ctx.setTransform(ratio, 0, 0, ratio, 0, 0);
+
+        const width = rect.width;
+        const height = rect.height;
+        const pad = { top: 14, right: 14, bottom: 25, left: 58 };
+        const plotWidth = width - pad.left - pad.right;
+        const plotHeight = height - pad.top - pad.bottom;
+        const centerX = pad.left + plotWidth / 2;
+        const maxDistance = chartRangePct / 100;
+        const bidPoints = [];
+        const askPoints = [];
+        let bidCum = 0;
+        let askCum = 0;
+
+        for (const [price, quantity] of bids) {
+          const distance = (mid - price) / mid;
+          if (distance > maxDistance) break;
+          bidCum += price * quantity;
+          bidPoints.push({ distance, value: bidCum });
+        }
+        for (const [price, quantity] of asks) {
+          const distance = (price - mid) / mid;
+          if (distance > maxDistance) break;
+          askCum += price * quantity;
+          askPoints.push({ distance, value: askCum });
+        }
+
+        const maxValue = Math.max(1, bidCum, askCum);
+        ctx.clearRect(0, 0, width, height);
+        ctx.font = "10px system-ui, sans-serif";
+        ctx.textBaseline = "middle";
+        ctx.strokeStyle = "rgba(130, 144, 165, .16)";
+        ctx.fillStyle = "#8190a5";
+        ctx.lineWidth = 1;
+
+        for (let i = 0; i <= 4; i++) {
+          const y = pad.top + (plotHeight * i) / 4;
+          ctx.beginPath();
+          ctx.moveTo(pad.left, y);
+          ctx.lineTo(width - pad.right, y);
+          ctx.stroke();
+          ctx.fillText(formatUsd(maxValue * (1 - i / 4)), 2, y);
+        }
+        for (let i = -2; i <= 2; i++) {
+          const x = centerX + (plotWidth / 4) * i;
+          ctx.beginPath();
+          ctx.moveTo(x, pad.top);
+          ctx.lineTo(x, pad.top + plotHeight);
+          ctx.stroke();
+          const label = `${i * (chartRangePct / 2)}%`;
+          ctx.fillText(label, x - 13, height - 10);
+        }
+
+        function plot(points, side, color, fill) {
+          if (!points.length) return;
+          ctx.beginPath();
+          ctx.moveTo(centerX, pad.top + plotHeight);
+          for (const point of points) {
+            const x = centerX + (side === "ask" ? 1 : -1) * (point.distance / maxDistance) * (plotWidth / 2);
+            const y = pad.top + plotHeight - (point.value / maxValue) * plotHeight;
+            ctx.lineTo(x, y);
+          }
+          const last = points[points.length - 1];
+          const lastX = centerX + (side === "ask" ? 1 : -1) * (last.distance / maxDistance) * (plotWidth / 2);
+          ctx.lineTo(lastX, pad.top + plotHeight);
+          ctx.closePath();
+          ctx.fillStyle = fill;
+          ctx.fill();
+          ctx.beginPath();
+          for (let i = 0; i < points.length; i++) {
+            const point = points[i];
+            const x = centerX + (side === "ask" ? 1 : -1) * (point.distance / maxDistance) * (plotWidth / 2);
+            const y = pad.top + plotHeight - (point.value / maxValue) * plotHeight;
+            if (i === 0) ctx.moveTo(x, y);
+            else ctx.lineTo(x, y);
+          }
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+
+        plot(bidPoints, "bid", "#2bd49a", "rgba(43, 212, 154, .12)");
+        plot(askPoints, "ask", "#ff657a", "rgba(255, 101, 122, .12)");
+      }
+
+      function render() {
+        const bids = sortedLevels(state.bids, "bid");
+        const asks = sortedLevels(state.asks, "ask");
+        const displayedBidTotal = renderSide(byId("bids"), bids, "bid");
+        const displayedAskTotal = renderSide(byId("asks"), asks, "ask");
+        byId("bidTotal").textContent = displayedBidTotal ? formatUsd(displayedBidTotal) : "—";
+        byId("askTotal").textContent = displayedAskTotal ? formatUsd(displayedAskTotal) : "—";
+        byId("titleSymbol").textContent = symbolInput.value;
+        byId("marketTitle").textContent = `Order book ${symbolInput.value}USDT`;
+        byId("marketLabel").textContent = `${symbolInput.value}USDT · pembaruan menunggu koneksi`;
+
+        if (!bids.length || !asks.length) {
+          for (const id of ["midPrice", "spread", "spreadPct", "depthTotal", "imbalance", "centerMid"]) {
+            byId(id).textContent = "—";
+          }
+          byId("depthSplit").textContent = "Bid — · Ask —";
+          byId("matrixBid").textContent = "—";
+          byId("matrixAsk").textContent = "—";
+          byId("lastUpdate").textContent = "Menunggu snapshot";
+          return;
+        }
+
+        const bestBid = bids[0][0];
+        const bestAsk = asks[0][0];
+        const mid = (bestBid + bestAsk) / 2;
+        const spread = bestAsk - bestBid;
+        const spreadPct = spread / mid * 100;
+        const nearBids = bids.filter(([price]) => price >= mid * (1 - nearBandPct / 100));
+        const nearAsks = asks.filter(([price]) => price <= mid * (1 + nearBandPct / 100));
+        const bidUsd = nearBids.reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+        const askUsd = nearAsks.reduce((sum, [price, quantity]) => sum + price * quantity, 0);
+        const depthUsd = bidUsd + askUsd;
+        const imbalancePct = depthUsd ? bidUsd / depthUsd * 100 : 50;
+
+        byId("midPrice").textContent = formatPrice(mid);
+        byId("midPrice").classList.remove("empty");
+        byId("centerMid").textContent = formatPrice(mid);
+        byId("spread").textContent = formatPrice(spread);
+        byId("spread").classList.remove("empty");
+        byId("spreadPct").textContent = `${spreadPct.toFixed(4)}% dari mid`;
+        byId("depthTotal").textContent = formatUsd(depthUsd);
+        byId("depthTotal").classList.remove("empty");
+        byId("depthSplit").textContent = `Bid ${formatUsd(bidUsd)} · Ask ${formatUsd(askUsd)}`;
+        byId("imbalance").textContent = `${imbalancePct.toFixed(1)}%`;
+        byId("imbalance").classList.remove("empty");
+        byId("imbalance").classList.toggle("positive", imbalancePct >= 50);
+        byId("imbalance").classList.toggle("negative", imbalancePct < 50);
+        byId("matrixBid").textContent = formatUsd(bidUsd);
+        byId("matrixAsk").textContent = formatUsd(askUsd);
+        byId("lastUpdate").textContent = state.lastUpdate ? `Update ${new Date(state.lastUpdate).toLocaleTimeString("id-ID")}` : "Menunggu snapshot";
+        byId("marketLabel").textContent = `${symbolInput.value}USDT · update ${new Date(state.lastUpdate).toLocaleTimeString("id-ID")}`;
+        drawDepth(bids, asks, mid);
+      }
+
+      function scheduleReconnect() {
+        clearTimeout(state.reconnectTimer);
+        const wait = Math.min(state.reconnectDelay, 30000);
+        state.reconnectAttempt += 1;
+        setStatus("error", `Terputus · coba lagi ${Math.ceil(wait / 1000)} dtk`);
+        state.reconnectTimer = setTimeout(connect, wait);
+        state.reconnectDelay = Math.min(wait * 2, 30000);
+      }
+
+      function connect() {
+        clearTimeout(state.reconnectTimer);
+        clearTimeout(state.connectTimer);
+        clearInterval(state.heartbeat);
+        if (state.socket) {
+          state.socket.onclose = null;
+          state.socket.close();
+        }
+        clearBook();
+        setStatus("connecting", "Menghubungkan ke Bybit…");
+
+        const socket = new WebSocket(endpoint);
+        state.socket = socket;
+        state.connectTimer = setTimeout(() => {
+          if (socket.readyState === WebSocket.CONNECTING) {
+            setStatus("error", "Feed tidak terjangkau · cek jaringan atau kebijakan akses");
+            socket.close();
+          }
+        }, 12000);
+        socket.onopen = () => {
+          clearTimeout(state.connectTimer);
+          state.reconnectAttempt = 0;
+          socket.send(JSON.stringify({
+            op: "subscribe",
+            args: [`orderbook.50.${symbolInput.value}USDT`],
+          }));
+          state.heartbeat = setInterval(() => {
+            if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ op: "ping" }));
+          }, 20000);
+          setStatus("connecting", "Tersambung · menunggu snapshot…");
+        };
+        socket.onmessage = (event) => {
+          let message;
+          try {
+            message = JSON.parse(event.data);
+          } catch {
+            return;
+          }
+          if (message.op === "ping") {
+            socket.send(JSON.stringify({ op: "pong" }));
+            return;
+          }
+          if (!message.topic || !message.data || !message.topic.startsWith("orderbook.")) return;
+
+          if (message.type === "snapshot") {
+            state.bids.clear();
+            state.asks.clear();
+          }
+          applyUpdates(state.bids, message.data.b);
+          applyUpdates(state.asks, message.data.a);
+          state.lastUpdate = Number(message.ts) || Date.now();
+          state.reconnectDelay = 1000;
+          setStatus("live", `LIVE · Bybit · ${state.reconnectAttempt ? "tersambung kembali" : "terhubung"}`);
+          render();
+        };
+        socket.onerror = () => {
+          clearTimeout(state.connectTimer);
+          setStatus("error", "Koneksi gagal · cek jaringan atau kebijakan akses");
+        };
+        socket.onclose = () => {
+          clearTimeout(state.connectTimer);
+          clearInterval(state.heartbeat);
+          scheduleReconnect();
+        };
+      }
+
+      symbolInput.addEventListener("change", connect);
+      unitInput.addEventListener("change", render);
+      window.addEventListener("resize", () => {
+        if (state.lastUpdate) render();
+      });
+      render();
+      connect();
+    })();
+  </script>
+</body>
+</html>
