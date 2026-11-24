@@ -1,0 +1,637 @@
+<!doctype html>
+<html lang="id">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#090e18">
+  <title>PasarLab | Hype Scanner</title>
+  <style>
+    :root {
+      color-scheme: dark;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #090e18;
+      color: #e7edf7;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      --panel: #111a28;
+      --line: #202c3e;
+      --muted: #8290a5;
+      --green: #2bd49a;
+      --red: #ff657a;
+      --blue: #70a7ff;
+    }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      min-width: 320px;
+      min-height: 100vh;
+      background: radial-gradient(ellipse at 70% -20%, rgba(52, 94, 157, .2), transparent 42%), #090e18;
+    }
+    button, input, select { font: inherit; }
+    .shell { max-width: 1500px; margin: 0 auto; padding: 26px 22px 40px; }
+    .topbar, .brand, .toolbar, .panel-heading, .status, .signal, .coin-name {
+      display: flex;
+      align-items: center;
+    }
+    .topbar { justify-content: space-between; gap: 18px; }
+    .brand { gap: 11px; }
+    .brand-mark {
+      display: grid;
+      width: 35px;
+      height: 35px;
+      place-items: center;
+      border: 1px solid #33547e;
+      border-radius: 10px;
+      background: #162943;
+      color: #9dc4ff;
+      font-size: 15px;
+      font-weight: 800;
+    }
+    .brand-name { font-size: 14px; font-weight: 750; letter-spacing: .02em; }
+    .brand-caption { margin-top: 2px; color: var(--muted); font-size: 11px; }
+    .nav-link {
+      padding: 9px 12px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      color: #b8c8dd;
+      font-size: 12px;
+      text-decoration: none;
+    }
+    .nav-link:hover { border-color: #42638d; color: #e7edf7; }
+    .status {
+      gap: 8px;
+      min-width: 0;
+      margin-top: 22px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 9px;
+      background: rgba(17, 26, 40, .78);
+      color: #abb8ca;
+      font-size: 12px;
+    }
+    .status-dot { flex: 0 0 auto; width: 7px; height: 7px; border-radius: 50%; background: #f0ad4e; }
+    .status[data-state="live"] { border-color: #1d5e4d; color: #91e8c9; }
+    .status[data-state="live"] .status-dot { background: var(--green); }
+    .status[data-state="error"] { border-color: #71404d; color: #ffa4b1; }
+    .status[data-state="error"] .status-dot { background: var(--red); }
+    .intro { margin: 28px 0 18px; }
+    h1 { margin: 0; font-size: clamp(24px, 4vw, 34px); letter-spacing: -.04em; }
+    .subtitle { max-width: 850px; margin: 8px 0 0; color: var(--muted); font-size: 13px; line-height: 1.6; }
+    .toolbar { flex-wrap: wrap; gap: 9px; margin: 18px 0 14px; }
+    .control {
+      min-height: 38px;
+      padding: 8px 10px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      outline: 0;
+      background: var(--panel);
+      color: #dce5f2;
+      font-size: 12px;
+    }
+    .control:focus { border-color: #4b76ad; }
+    input.control { flex: 1 1 230px; min-width: 180px; }
+    select.control { min-width: 145px; }
+    option { background: var(--panel); }
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .metric, .panel {
+      border: 1px solid var(--line);
+      border-radius: 11px;
+      background: linear-gradient(155deg, rgba(20, 31, 47, .98), rgba(15, 23, 36, .98));
+      box-shadow: 0 12px 30px rgba(0, 0, 0, .12);
+    }
+    .metric { min-height: 76px; padding: 13px 15px; }
+    .metric-label { color: var(--muted); font-size: 11px; }
+    .metric-value { margin-top: 8px; font-size: 18px; font-weight: 700; font-variant-numeric: tabular-nums; }
+    .panel { overflow: hidden; }
+    .panel-heading { justify-content: space-between; gap: 10px; min-height: 50px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+    .panel-title { font-size: 13px; font-weight: 700; }
+    .panel-note { color: var(--muted); font-size: 11px; }
+    .table-wrap { max-height: min(68vh, 780px); overflow: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 11px; font-variant-numeric: tabular-nums; }
+    thead { position: sticky; top: 0; z-index: 1; background: #101927; }
+    th, td { padding: 10px 9px; border-bottom: 1px solid rgba(32, 44, 62, .72); text-align: right; white-space: nowrap; }
+    th { color: var(--muted); font-size: 10px; font-weight: 600; }
+    th:first-child, td:first-child, th:nth-child(2), td:nth-child(2), th:last-child, td:last-child { text-align: left; }
+    tbody tr:hover { background: rgba(112, 167, 255, .055); }
+    .coin-name { gap: 7px; font-weight: 700; }
+    .coin-symbol { color: var(--muted); font-size: 10px; font-weight: 500; }
+    .rank { color: #8290a5; }
+    .score-cell { min-width: 100px; }
+    .score-track { width: 58px; height: 5px; overflow: hidden; border-radius: 99px; background: #253247; }
+    .score-fill { height: 100%; border-radius: inherit; background: var(--blue); }
+    .score-value { min-width: 25px; color: #dce5f2; text-align: right; }
+    .signal { display: inline-flex; justify-content: center; min-width: 83px; padding: 5px 7px; border: 1px solid var(--line); border-radius: 999px; font-size: 9px; font-weight: 750; letter-spacing: .02em; }
+    .signal[data-signal="buy"] { border-color: #1d5e4d; background: rgba(43, 212, 154, .08); color: #91e8c9; }
+    .signal[data-signal="sell"] { border-color: #71404d; background: rgba(255, 101, 122, .08); color: #ffa4b1; }
+    .signal[data-signal="watch"] { color: #b5c0d0; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    .neutral, .empty { color: var(--muted); }
+    .empty-row { padding: 26px 12px; color: var(--muted); text-align: center !important; }
+    .footnote { margin: 14px 2px 0; color: #78869b; font-size: 10px; line-height: 1.7; }
+    @media (max-width: 850px) {
+      .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .panel-note { display: none; }
+    }
+    @media (max-width: 620px) {
+      .shell { padding: 18px 10px 30px; }
+      .topbar { align-items: flex-start; }
+      .nav-link { font-size: 10px; }
+      .summary { gap: 7px; }
+      .metric { min-height: 68px; padding: 10px; }
+      .metric-value { font-size: 16px; }
+      th, td { padding: 9px 7px; }
+      .status { align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <div class="brand-mark" aria-hidden="true">P</div>
+        <div>
+          <div class="brand-name">PasarLab</div>
+          <div class="brand-caption">Market data workspace</div>
+        </div>
+      </div>
+      <a class="nav-link" href="./orderbook.html">Order book</a>
+    </header>
+
+    <div id="scanStatus" class="status" data-state="connecting" role="status" aria-live="polite">
+      <span class="status-dot" aria-hidden="true"></span>
+      <span id="scanStatusText">Memuat daftar market Bybit…</span>
+    </div>
+
+    <section class="intro">
+      <h1>Hype Scanner</h1>
+      <p class="subtitle">
+        Pemeringkatan seluruh kontrak perpetual USDT Bybit yang aktif berdasarkan momentum, lonjakan turnover,
+        perubahan open interest, spread, dan keseimbangan bid-ask teratas. Ini adalah pemindai kandidat, bukan prediksi pasti.
+      </p>
+    </section>
+
+    <div class="toolbar">
+      <input id="search" class="control" type="search" placeholder="Cari coin, mis. BTC atau ETH" aria-label="Cari coin">
+      <select id="signalFilter" class="control" aria-label="Filter bias">
+        <option value="all">Semua bias</option>
+        <option value="buy">BUY BIAS</option>
+        <option value="sell">SELL BIAS</option>
+        <option value="watch">WATCH</option>
+      </select>
+      <select id="sortBy" class="control" aria-label="Urutkan market">
+        <option value="score">Urutkan: skor hype</option>
+        <option value="turnover24h">Urutkan: turnover 24j</option>
+        <option value="change5m">Urutkan: perubahan 5m</option>
+        <option value="change1h">Urutkan: perubahan 1j</option>
+      </select>
+    </div>
+
+    <section class="summary" aria-label="Ringkasan pemindai">
+      <article class="metric">
+        <div class="metric-label">Market aktif USDT</div>
+        <div id="marketCount" class="metric-value">—</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Kandidat hype (skor ≥55)</div>
+        <div id="candidateCount" class="metric-value">—</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Bias beli / jual</div>
+        <div id="biasCount" class="metric-value">— / —</div>
+      </article>
+      <article class="metric">
+        <div class="metric-label">Pembaruan terakhir</div>
+        <div id="lastUpdate" class="metric-value">Menunggu data</div>
+      </article>
+    </section>
+
+    <section class="panel" aria-label="Peringkat coin dan sinyal">
+      <div class="panel-heading">
+        <div class="panel-title">Agen per coin · kandidat aktivitas tertinggi di urutan atas</div>
+        <div id="visibleCount" class="panel-note">0 market</div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Coin</th>
+              <th>Hype</th>
+              <th>Bias</th>
+              <th>5m</th>
+              <th>1j</th>
+              <th>Volume 5m</th>
+              <th>OI 5m</th>
+              <th>Bid teratas</th>
+              <th>Spread</th>
+              <th>Turnover 24j</th>
+            </tr>
+          </thead>
+          <tbody id="marketRows">
+            <tr><td class="empty-row" colspan="11">Mengambil data market…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <p class="footnote">
+      Skor 0–100 menggabungkan momentum 5m/1j (35 poin), surge turnover (35), perubahan open interest (15),
+      imbalance bid-ask teratas (10), dan kualitas spread (5). BUY BIAS mensyaratkan skor ≥55, turnover ≥1,5x baseline,
+      spread ≤0,2%, momentum 5m ≥0,15%, momentum 1j positif, dan porsi bid teratas ≥55%; SELL BIAS memakai kondisi arah sebaliknya.
+      Porsi bid memakai quote terbaik, bukan seluruh depth ±0,5%. Sampel 5 menit dikumpulkan di browser; baseline membutuhkan sekitar 5 menit.
+      Jika data belum lengkap atau koneksi gagal, bias tetap WATCH. Skor tidak menjamin coin akan hype; data dapat berubah cepat.
+      Informasi ini bukan rekomendasi investasi dan tidak mengeksekusi order.
+    </p>
+  </main>
+
+  <script>
+    (() => {
+      const apiBase = "https://api.bybit.com/v5/market";
+      const scanIntervalMs = 30_000;
+      const baselineMs = 5 * 60_000;
+      const maxSampleAgeMs = 7 * 60_000;
+      const historyRetentionMs = 65 * 60_000;
+      const candidateThreshold = 55;
+      const state = {
+        instruments: null,
+        universePromise: null,
+        history: new Map(),
+        rows: [],
+        lastSuccessAt: 0,
+        scanning: false,
+      };
+
+      const byId = (id) => document.getElementById(id);
+      const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
+      const numberOrNull = (value) => {
+        if (value === undefined || value === null || value === "") return null;
+        const number = Number(value);
+        return Number.isFinite(number) ? number : null;
+      };
+
+      function setStatus(stateName, text) {
+        byId("scanStatus").dataset.state = stateName;
+        byId("scanStatusText").textContent = text;
+      }
+
+      async function fetchJson(url) {
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 15_000);
+        try {
+          const response = await fetch(url, { signal: controller.signal, cache: "no-store" });
+          if (!response.ok) throw new Error(`Bybit mengembalikan HTTP ${response.status}`);
+          const payload = await response.json();
+          if (payload.retCode !== 0) throw new Error(payload.retMsg || `Kode Bybit ${payload.retCode}`);
+          return payload.result;
+        } catch (error) {
+          if (controller.signal.aborted) throw new Error("Permintaan ke Bybit melewati batas waktu 15 detik.");
+          throw error;
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+
+      async function loadUniverse() {
+        if (state.instruments) return state.instruments;
+        if (state.universePromise) return state.universePromise;
+        state.universePromise = (async () => {
+          const instruments = [];
+          let cursor = "";
+          do {
+            const params = new URLSearchParams({
+              category: "linear",
+              status: "Trading",
+              limit: "1000",
+            });
+            if (cursor) params.set("cursor", cursor);
+            const result = await fetchJson(`${apiBase}/instruments-info?${params}`);
+            instruments.push(...(result.list || []));
+            cursor = result.nextPageCursor || "";
+          } while (cursor);
+          const activeSymbols = new Set(
+            instruments
+              .filter((item) =>
+                item.status === "Trading" &&
+                item.quoteCoin === "USDT" &&
+                String(item.contractType || "").toLowerCase().includes("perpetual")
+              )
+              .map((item) => item.symbol)
+          );
+          if (!activeSymbols.size) throw new Error("Daftar kontrak perpetual USDT aktif kosong.");
+          state.instruments = activeSymbols;
+          return activeSymbols;
+        })();
+        try {
+          return await state.universePromise;
+        } catch (error) {
+          state.universePromise = null;
+          throw error;
+        }
+      }
+
+      function findBaseline(samples, targetTime) {
+        for (let index = samples.length - 1; index >= 0; index -= 1) {
+          if (samples[index].time <= targetTime) return samples[index];
+        }
+        return null;
+      }
+
+      function sampleTicker(ticker, time) {
+        const symbol = ticker.symbol;
+        const price = numberOrNull(ticker.lastPrice);
+        const turnover = numberOrNull(ticker.turnover24h);
+        const openInterest = numberOrNull(ticker.openInterestValue);
+        if (!symbol || price === null || price <= 0) return null;
+        const samples = state.history.get(symbol) || [];
+        const previous = samples[samples.length - 1];
+        if (!previous || previous.time < time) {
+          samples.push({ time, price, turnover, openInterest });
+          while (samples.length && samples[0].time < time - historyRetentionMs) samples.shift();
+          state.history.set(symbol, samples);
+        }
+        const baseline = findBaseline(samples, time - baselineMs);
+        if (!baseline || time - baseline.time > maxSampleAgeMs) {
+          return { change5m: null, turnoverSurge: null, oiChange5m: null };
+        }
+        const elapsedMs = time - baseline.time;
+        const change5m = baseline.price > 0 ? (price / baseline.price - 1) * 100 : null;
+        const turnoverDelta = turnover !== null && baseline.turnover !== null
+          ? turnover - baseline.turnover
+          : null;
+        const expectedTurnover = turnover !== null ? turnover * elapsedMs / (24 * 60 * 60_000) : null;
+        const turnoverSurge = turnoverDelta !== null && turnoverDelta >= 0 && expectedTurnover > 0
+          ? turnoverDelta / expectedTurnover
+          : null;
+        const oiChange5m = openInterest !== null && baseline.openInterest !== null && baseline.openInterest > 0
+          ? (openInterest / baseline.openInterest - 1) * 100
+          : null;
+        return { change5m, turnoverSurge, oiChange5m };
+      }
+
+      function analyzeTicker(ticker, time) {
+        const symbol = ticker.symbol;
+        const change5m = sampleTicker(ticker, time);
+        if (!change5m) {
+          return {
+            symbol,
+            lastPrice: null,
+            change5m: null,
+            change1h: null,
+            turnoverSurge: null,
+            oiChange5m: null,
+            bidShare: null,
+            spreadPct: null,
+            turnover24h: numberOrNull(ticker.turnover24h),
+            score: null,
+            signal: "watch",
+            reasons: ["Harga ticker tidak valid"],
+          };
+        }
+        const lastPrice = numberOrNull(ticker.lastPrice);
+        const previousHourPrice = numberOrNull(ticker.prevPrice1h);
+        const change1h = lastPrice !== null && previousHourPrice !== null && previousHourPrice > 0
+          ? (lastPrice / previousHourPrice - 1) * 100
+          : null;
+        const bidPrice = numberOrNull(ticker.bid1Price);
+        const bidSize = numberOrNull(ticker.bid1Size);
+        const askPrice = numberOrNull(ticker.ask1Price);
+        const askSize = numberOrNull(ticker.ask1Size);
+        const bidNotional = bidPrice !== null && bidSize !== null ? bidPrice * bidSize : null;
+        const askNotional = askPrice !== null && askSize !== null ? askPrice * askSize : null;
+        const quoteTotal = bidNotional !== null && askNotional !== null ? bidNotional + askNotional : null;
+        const bidShare = quoteTotal > 0 ? bidNotional / quoteTotal * 100 : null;
+        const mid = bidPrice !== null && askPrice !== null ? (bidPrice + askPrice) / 2 : null;
+        const spreadPct = mid > 0 && askPrice >= bidPrice ? (askPrice - bidPrice) / mid * 100 : null;
+        const turnover24h = numberOrNull(ticker.turnover24h);
+        const metrics = {
+          symbol,
+          lastPrice,
+          change5m: change5m.change5m,
+          change1h,
+          turnoverSurge: change5m.turnoverSurge,
+          oiChange5m: change5m.oiChange5m,
+          bidShare,
+          spreadPct,
+          turnover24h,
+        };
+        const ready = metrics.change5m !== null && metrics.change1h !== null;
+        if (!ready) return { ...metrics, score: null, signal: "watch", reasons: ["Mengumpulkan baseline 5 menit"] };
+
+        const momentum5Score = clamp(Math.abs(metrics.change5m) / 0.75, 0, 1) * 20;
+        const momentum1hScore = clamp(Math.abs(metrics.change1h) / 3, 0, 1) * 15;
+        const volumeScore = metrics.turnoverSurge === null
+          ? 0
+          : clamp((metrics.turnoverSurge - 1) / 3, 0, 1) * 35;
+        const oiScore = metrics.oiChange5m === null
+          ? 0
+          : clamp(Math.abs(metrics.oiChange5m) / 2, 0, 1) * 15;
+        const imbalanceScore = metrics.bidShare === null
+          ? 0
+          : clamp(Math.abs(metrics.bidShare - 50) / 25, 0, 1) * 10;
+        const spreadScore = metrics.spreadPct === null
+          ? 0
+          : clamp((0.5 - metrics.spreadPct) / 0.45, 0, 1) * 5;
+        const score = Math.round(momentum5Score + momentum1hScore + volumeScore + oiScore + imbalanceScore + spreadScore);
+        const commonConditions =
+          score >= candidateThreshold &&
+          metrics.turnoverSurge !== null &&
+          metrics.turnoverSurge >= 1.5 &&
+          metrics.spreadPct !== null &&
+          metrics.spreadPct <= 0.2;
+        const bullish = commonConditions &&
+          metrics.change5m >= 0.15 &&
+          metrics.change1h > 0 &&
+          metrics.bidShare !== null &&
+          metrics.bidShare >= 55;
+        const bearish = commonConditions &&
+          metrics.change5m <= -0.15 &&
+          metrics.change1h < 0 &&
+          metrics.bidShare !== null &&
+          metrics.bidShare <= 45;
+        const reasons = [];
+        if (metrics.turnoverSurge !== null && metrics.turnoverSurge >= 1.5) reasons.push(`Turnover ${metrics.turnoverSurge.toFixed(1)}x baseline`);
+        if (Math.abs(metrics.change5m) >= 0.15) reasons.push(`Momentum 5m ${formatPercent(metrics.change5m)}`);
+        if (metrics.oiChange5m !== null && Math.abs(metrics.oiChange5m) >= 0.1) reasons.push(`OI 5m ${formatPercent(metrics.oiChange5m)}`);
+        if (metrics.bidShare !== null && Math.abs(metrics.bidShare - 50) >= 5) reasons.push(`Bid teratas ${metrics.bidShare.toFixed(0)}%`);
+        if (metrics.spreadPct !== null && metrics.spreadPct <= 0.2) reasons.push(`Spread ${metrics.spreadPct.toFixed(3)}%`);
+        const signal = bullish ? "buy" : bearish ? "sell" : "watch";
+        if (signal === "watch" && reasons.length === 0) reasons.push("Belum ada konfirmasi volume dan momentum");
+        return { ...metrics, score, signal, reasons };
+      }
+
+      function formatPercent(value) {
+        if (value === null || value === undefined || !Number.isFinite(value)) return "—";
+        return `${value > 0 ? "+" : ""}${value.toFixed(2)}%`;
+      }
+
+      function formatMoney(value) {
+        if (value === null || !Number.isFinite(value)) return "—";
+        const abs = Math.abs(value);
+        if (abs >= 1_000_000_000) return `$${(value / 1_000_000_000).toFixed(2)}B`;
+        if (abs >= 1_000_000) return `$${(value / 1_000_000).toFixed(2)}M`;
+        if (abs >= 1_000) return `$${(value / 1_000).toFixed(1)}K`;
+        return `$${value.toFixed(0)}`;
+      }
+
+      function formatSurge(value) {
+        return value === null ? "—" : `${value.toFixed(1)}x`;
+      }
+
+      function changeClass(value) {
+        if (value === null) return "neutral";
+        return value > 0 ? "positive" : value < 0 ? "negative" : "neutral";
+      }
+
+      function currentRows() {
+        const query = byId("search").value.trim().toUpperCase();
+        const filter = byId("signalFilter").value;
+        const sortBy = byId("sortBy").value;
+        const rows = state.rows.filter((row) =>
+          (!query || row.symbol.includes(query)) &&
+          (filter === "all" || row.signal === filter)
+        );
+        rows.sort((a, b) => {
+          const left = a[sortBy];
+          const right = b[sortBy];
+          if (left === null || left === undefined) {
+            return right === null || right === undefined ? 0 : 1;
+          }
+          if (right === null || right === undefined) return -1;
+          return right - left;
+        });
+        return rows;
+      }
+
+      function render() {
+        const rows = currentRows();
+        byId("visibleCount").textContent = `${rows.length.toLocaleString("id-ID")} market`;
+        byId("marketCount").textContent = state.rows.length.toLocaleString("id-ID");
+        byId("candidateCount").textContent = state.rows.filter((row) => row.score !== null && row.score >= candidateThreshold).length.toLocaleString("id-ID");
+        const buyCount = state.rows.filter((row) => row.signal === "buy").length;
+        const sellCount = state.rows.filter((row) => row.signal === "sell").length;
+        byId("biasCount").textContent = `${buyCount} / ${sellCount}`;
+        byId("lastUpdate").textContent = state.lastSuccessAt
+          ? new Date(state.lastSuccessAt).toLocaleTimeString("id-ID")
+          : "Menunggu data";
+        const body = byId("marketRows");
+        if (!rows.length) {
+          body.innerHTML = `<tr><td class="empty-row" colspan="11">${state.rows.length ? "Tidak ada coin yang cocok dengan filter." : "Belum ada data market."}</td></tr>`;
+          return;
+        }
+        const stale = !state.lastSuccessAt || Date.now() - state.lastSuccessAt > 90_000;
+        const fragment = document.createDocumentFragment();
+        rows.forEach((row, index) => {
+          const tr = document.createElement("tr");
+          const score = stale ? null : row.score;
+          const signal = stale || score === null ? "watch" : row.signal;
+          const values = [
+            String(index + 1),
+            "",
+            "",
+            "",
+            formatPercent(row.change5m),
+            formatPercent(row.change1h),
+            formatSurge(row.turnoverSurge),
+            formatPercent(row.oiChange5m),
+            row.bidShare === null ? "—" : `${row.bidShare.toFixed(1)}%`,
+            row.spreadPct === null ? "—" : `${row.spreadPct.toFixed(3)}%`,
+            formatMoney(row.turnover24h),
+          ];
+          values.forEach((value, cellIndex) => {
+            const td = document.createElement("td");
+            if (cellIndex === 0) {
+              td.className = "rank";
+              td.textContent = value;
+            } else if (cellIndex === 1) {
+              const coin = document.createElement("div");
+              coin.className = "coin-name";
+              const base = document.createElement("span");
+              base.textContent = row.symbol.replace(/USDT$/, "");
+              const quote = document.createElement("span");
+              quote.className = "coin-symbol";
+              quote.textContent = "/ USDT";
+              coin.append(base, quote);
+              td.append(coin);
+            } else if (cellIndex === 2) {
+              td.className = "score-cell";
+              const wrap = document.createElement("span");
+              wrap.className = "coin-name";
+              const track = document.createElement("span");
+              track.className = "score-track";
+              const fill = document.createElement("span");
+              fill.className = "score-fill";
+              fill.style.display = "block";
+              fill.style.width = `${score === null ? 0 : score}%`;
+              track.append(fill);
+              const label = document.createElement("span");
+              label.className = "score-value";
+              label.textContent = score === null ? "—" : String(score);
+              wrap.append(track, label);
+              td.append(wrap);
+            } else if (cellIndex === 3) {
+              const badge = document.createElement("span");
+              badge.className = "signal";
+              badge.dataset.signal = signal;
+              badge.textContent = signal === "buy" ? "BUY BIAS" : signal === "sell" ? "SELL BIAS" : "WATCH";
+              badge.title = stale ? "Data scanner stale; menunggu snapshot baru." : row.reasons.join(" · ");
+              td.append(badge);
+            } else {
+              td.textContent = value;
+              td.className = [4, 5, 7].includes(cellIndex) ? changeClass(
+                cellIndex === 4 ? row.change5m : cellIndex === 5 ? row.change1h : row.oiChange5m
+              ) : "neutral";
+            }
+            tr.append(td);
+          });
+          fragment.append(tr);
+        });
+        body.replaceChildren(fragment);
+      }
+
+      async function scan() {
+        if (state.scanning) return;
+        state.scanning = true;
+        setStatus("connecting", "Memuat snapshot semua kontrak perpetual USDT…");
+        try {
+          const universe = await loadUniverse();
+          const result = await fetchJson(`${apiBase}/tickers?category=linear`);
+          const time = Date.now();
+          const tickerMap = new Map((result.list || []).map((item) => [item.symbol, item]));
+          const rows = [];
+          for (const symbol of universe) {
+            const ticker = tickerMap.get(symbol);
+            if (ticker) rows.push(analyzeTicker(ticker, time));
+          }
+          if (!rows.length) throw new Error("Snapshot ticker tidak berisi kontrak dari daftar market aktif.");
+          state.rows = rows;
+          state.lastSuccessAt = time;
+          setStatus("live", `Data Bybit diperbarui · ${rows.length.toLocaleString("id-ID")} kontrak · sampel tiap 30 detik`);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          setStatus("error", `Gagal mengambil data Bybit: ${message}`);
+        } finally {
+          state.scanning = false;
+          render();
+        }
+      }
+
+      byId("search").addEventListener("input", render);
+      byId("signalFilter").addEventListener("change", render);
+      byId("sortBy").addEventListener("change", render);
+      render();
+      void scan();
+      setInterval(() => {
+        void scan();
+        if (state.lastSuccessAt && Date.now() - state.lastSuccessAt > 90_000) render();
+      }, scanIntervalMs);
+    })();
+  </script>
+</body>
+</html>
