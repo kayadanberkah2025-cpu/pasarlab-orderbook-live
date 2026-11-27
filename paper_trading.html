@@ -1,0 +1,419 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulasi paper trading · order book Bybit live</title>
+<style>
+  :root { --bg:#0b1220; --card:#121b2e; --line:#223049; --txt:#e6edf7; --mut:#8fa0b8; --up:#2fbf71; --dn:#e5534b; --acc:#5aa2ff; }
+  * { box-sizing: border-box; }
+  body { margin:0; padding:16px; background:var(--bg); color:var(--txt); font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; }
+  h1 { font-size:18px; margin:0 0 6px; }
+  h2 { font-size:13px; margin:0 0 10px; color:var(--mut); text-transform:uppercase; letter-spacing:.05em; }
+  .note { color:var(--mut); font-size:12.5px; max-width:980px; margin:0 0 14px; }
+  .warn { border:1px solid #6b4a12; background:#241a08; color:#f0c674; padding:10px 12px; border-radius:8px; font-size:12.5px; max-width:980px; margin:0 0 14px; }
+  .grid { display:grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap:12px; max-width:1200px; }
+  section { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px; }
+  .full { grid-column: 1 / -1; }
+  label { display:flex; justify-content:space-between; align-items:center; gap:8px; margin:5px 0; color:var(--mut); font-size:12.5px; }
+  input, select { width:110px; background:#0b1220; color:var(--txt); border:1px solid var(--line); border-radius:6px; padding:4px 6px; }
+  input[type=checkbox] { width:auto; }
+  button { background:var(--acc); color:#04101f; border:0; border-radius:7px; padding:7px 12px; font-weight:600; cursor:pointer; margin:4px 6px 0 0; }
+  button.sec { background:#1d2a43; color:var(--txt); }
+  button:disabled { opacity:.45; cursor:default; }
+  .kv { display:flex; justify-content:space-between; padding:3px 0; border-bottom:1px dashed var(--line); }
+  .kv:last-child { border-bottom:0; }
+  .kv b { font-variant-numeric: tabular-nums; }
+  .up { color:var(--up); } .dn { color:var(--dn); } .mut { color:var(--mut); }
+  .badge { display:inline-block; padding:2px 8px; border-radius:99px; font-size:12px; font-weight:600; background:#1d2a43; }
+  .badge.up { background:#0f3a25; } .badge.dn { background:#44191a; }
+  table { width:100%; border-collapse:collapse; font-size:12.5px; font-variant-numeric: tabular-nums; }
+  th, td { text-align:right; padding:4px 6px; border-bottom:1px solid var(--line); }
+  th:first-child, td:first-child { text-align:left; }
+  th { color:var(--mut); font-weight:500; }
+  .scroll { max-height:260px; overflow:auto; }
+  canvas { width:100%; height:180px; display:block; background:#0b1220; border-radius:6px; }
+  .bar { height:8px; background:var(--dn); border-radius:4px; overflow:hidden; margin:6px 0 2px; }
+  .bar > i { display:block; height:100%; background:var(--up); width:50%; }
+</style>
+</head>
+<body>
+<h1>Simulasi paper trading · order book Bybit live</h1>
+<p class="note">Terhubung langsung dari browser Anda ke WebSocket publik Bybit (linear perpetual), sama seperti halaman PasarLab. Tidak ada uang sungguhan dan tidak ada akun. Strategi: masuk saat <b>imbalance order book</b> dan <b>rasio taker beli/jual</b> searah, lalu keluar lewat TP, SL, batas waktu, atau sinyal berbalik. Pengisian order memakai kedalaman book yang sebenarnya (slippage), ditambah biaya taker dan latensi.</p>
+<div class="warn"><b>Baca ini dulu.</b> Ini bukan prediksi yang terbukti dan bukan nasihat keuangan. Hasil beberapa jam adalah noise, bukan bukti strategi untung. Simulasi tidak memodelkan funding, antrean limit order, order yang gagal terisi, maupun likuidasi. Bagian <i>Uji sinyal</i> di bawah adalah cara jujur untuk melihat apakah sinyalnya benar-benar punya keunggulan sebelum biaya.</div>
+
+<div class="grid">
+  <section>
+    <h2>Pengaturan</h2>
+    <label>Pasar <select id="sym"><option>ETHUSDT</option><option>BTCUSDT</option><option>SOLUSDT</option></select></label>
+    <label>Band depth (±%) <input id="band" type="number" step="0.05" value="0.5"></label>
+    <label>Ambang imbalance bid (%) <input id="imbThr" type="number" step="1" value="60"></label>
+    <label>Ambang taker beli (%) <input id="ratioThr" type="number" step="1" value="58"></label>
+    <label>Jendela flow (detik) <input id="flowSec" type="number" step="5" value="60"></label>
+    <label>Volume minimum (USD) <input id="minVol" type="number" step="10000" value="150000"></label>
+    <label>Ukuran posisi (USD) <input id="size" type="number" step="100" value="1000"></label>
+    <label>Modal awal (USD) <input id="equity0" type="number" step="500" value="10000"></label>
+    <label>Biaya taker (%) <input id="fee" type="number" step="0.005" value="0.055"></label>
+    <label>Latensi order (ms) <input id="latency" type="number" step="50" value="300"></label>
+    <label>Take profit (%) <input id="tp" type="number" step="0.05" value="0.15"></label>
+    <label>Stop loss (%) <input id="sl" type="number" step="0.05" value="0.10"></label>
+    <label>Tahan maks. (detik) <input id="maxHold" type="number" step="10" value="120"></label>
+    <label>Jeda setelah keluar (detik) <input id="cooldown" type="number" step="5" value="30"></label>
+    <label>Keluar bila sinyal berbalik <input id="exitOpp" type="checkbox" checked></label>
+    <button id="btnStart">Mulai</button><button id="btnStop" class="sec" disabled>Berhenti</button><button id="btnReset" class="sec">Reset</button>
+    <p class="note" style="margin:8px 0 0">Pengaturan dibaca saat menekan Mulai. Ubah lalu Reset dan Mulai lagi.</p>
+  </section>
+
+  <section>
+    <h2>Kondisi live <span id="status" class="mut" style="text-transform:none;letter-spacing:0"></span></h2>
+    <div class="kv"><span>Harga tengah</span><b id="mid">-</b></div>
+    <div class="kv"><span>Spread</span><b id="spread">-</b></div>
+    <div class="kv"><span>Band efektif (batas kedalaman book)</span><b id="bandEff">-</b></div>
+    <div class="kv"><span>Bid / Ask dalam band (USD)</span><b id="depth">-</b></div>
+    <div class="kv"><span>Imbalance bid</span><b id="imb">-</b></div>
+    <div class="bar"><i id="imbBar"></i></div>
+    <div class="kv"><span>Taker beli (jendela flow)</span><b id="ratio">-</b></div>
+    <div class="kv"><span>Volume taker (USD)</span><b id="vol">-</b></div>
+    <div class="kv"><span>Bias jangka sangat pendek</span><b id="bias"><span class="badge">menunggu</span></b></div>
+    <div class="kv"><span>Posisi</span><b id="posn">-</b></div>
+    <p class="note" style="margin:8px 0 0">"Bias" hanya membaca tekanan order book dan transaksi beberapa detik terakhir. Ia tidak meramal arah harga.</p>
+  </section>
+
+  <section>
+    <h2>Hasil simulasi</h2>
+    <div class="kv"><span>Ekuitas</span><b id="eq">-</b></div>
+    <div class="kv"><span>Return</span><b id="ret">-</b></div>
+    <div class="kv"><span>Jumlah trade / menang</span><b id="ntr">-</b></div>
+    <div class="kv"><span>PnL bersih (trade selesai)</span><b id="net">-</b></div>
+    <div class="kv"><span>Rata-rata per trade</span><b id="avg">-</b></div>
+    <div class="kv"><span>Total biaya</span><b id="fees">-</b></div>
+    <div class="kv"><span>Drawdown maksimum</span><b id="dd">-</b></div>
+    <button id="btnTrades" class="sec">Unduh CSV trade</button><button id="btnSnaps" class="sec">Unduh CSV snapshot</button>
+  </section>
+
+  <section class="full">
+    <h2>Kurva ekuitas</h2>
+    <canvas id="chart" width="1100" height="180"></canvas>
+  </section>
+
+  <section>
+    <h2>Uji sinyal (sebelum biaya)</h2>
+    <p class="note" style="margin:0 0 8px">Setiap sinyal baru dicatat, lalu dilihat pergerakan harganya setelah 10/30/60 detik searah sinyal. Rata-rata harus <b>jauh di atas biaya pulang-pergi</b> agar strategi layak. Butuh ratusan sinyal sebelum angkanya berarti.</p>
+    <table><thead><tr><th>Horizon</th><th>Jumlah</th><th>Rata-rata (bps)</th><th>Searah (%)</th></tr></thead><tbody id="fwd"></tbody></table>
+    <p class="note" style="margin:8px 0 0">Biaya pulang-pergi: <b id="rtfee">-</b> bps (1 bps = 0,01%). Hit rate sekitar 50% berarti sinyal tidak lebih baik dari lempar koin.</p>
+  </section>
+
+  <section>
+    <h2>Trade terakhir</h2>
+    <div class="scroll"><table><thead><tr><th>Masuk</th><th>Sisi</th><th>Entry</th><th>Exit</th><th>Alasan</th><th>Tahan</th><th>PnL ($)</th></tr></thead><tbody id="log"></tbody></table></div>
+  </section>
+</div>
+
+<script>
+// ==== ENGINE START
+const HORIZONS = [10, 30, 60];
+function setLevel(map, p, q) { if (q === 0) map.delete(p); else map.set(p, q); }
+
+class Sim {
+  constructor(p) {
+    this.p = p;
+    this.clock = () => Date.now();
+    this.schedule = (ms, fn) => setTimeout(fn, ms);
+    this.reset();
+  }
+  reset() {
+    this.bids = new Map(); this.asks = new Map();
+    this.trades = [];
+    this.cash = this.p.equity0; this.pos = null; this.pending = false;
+    this.lastExit = -Infinity; this.lastMsg = this.clock();
+    this.closed = []; this.snaps = []; this.curve = [];
+    this.dir = 0; this.pendingFwd = [];
+    this.fwd = {}; HORIZONS.forEach(h => { this.fwd[h] = []; });
+    this.peak = this.p.equity0; this.maxDD = 0; this.last = null;
+  }
+  onMessage(m, now) {
+    if (!m.topic || !m.data) return;
+    this.lastMsg = now;
+    if (m.topic.startsWith('orderbook')) {
+      const d = m.data;
+      if (m.type === 'snapshot') { this.bids.clear(); this.asks.clear(); }
+      for (const [p, q] of d.b || []) setLevel(this.bids, +p, +q);
+      for (const [p, q] of d.a || []) setLevel(this.asks, +p, +q);
+    } else if (m.topic.startsWith('publicTrade')) {
+      for (const t of m.data) {
+        const usd = (+t.p) * (+t.v);
+        this.trades.push({ t: now, usd: t.S === 'Buy' ? usd : -usd }); // S = sisi taker
+      }
+    }
+  }
+  sorted(side) {
+    const arr = [...(side === 'b' ? this.bids : this.asks).entries()];
+    return side === 'b' ? arr.sort((x, y) => y[0] - x[0]) : arr.sort((x, y) => x[0] - y[0]);
+  }
+  metrics(now) {
+    const B = this.sorted('b'), A = this.sorted('a');
+    if (!B.length || !A.length) return null;
+    const bb = B[0][0], ba = A[0][0];
+    if (bb >= ba) return null; // book belum sinkron
+    const mid = (bb + ba) / 2;
+    const cov = Math.min((mid - B[B.length - 1][0]) / mid, (A[A.length - 1][0] - mid) / mid) * 100;
+    const band = Math.min(this.p.band, cov);
+    const lo = mid * (1 - band / 100), hi = mid * (1 + band / 100);
+    let bu = 0, au = 0;
+    for (const [px, q] of B) { if (px < lo) break; bu += px * q; }
+    for (const [px, q] of A) { if (px > hi) break; au += px * q; }
+    const imb = bu + au > 0 ? bu / (bu + au) * 100 : 50;
+    while (this.trades.length && this.trades[0].t < now - 300000) this.trades.shift();
+    const cut = now - this.p.flowSec * 1000;
+    let buy = 0, sell = 0;
+    for (let i = this.trades.length - 1; i >= 0; i--) {
+      const t = this.trades[i];
+      if (t.t < cut) break;
+      if (t.usd > 0) buy += t.usd; else sell -= t.usd;
+    }
+    const vol = buy + sell, ratio = vol > 0 ? buy / vol * 100 : 50;
+    let dir = 0;
+    if (vol >= this.p.minVol) {
+      if (imb >= this.p.imbThr && ratio >= this.p.ratioThr) dir = 1;
+      else if (imb <= 100 - this.p.imbThr && ratio <= 100 - this.p.ratioThr) dir = -1;
+    }
+    return { mid, bb, ba, spread: ba - bb, cov, band, bu, au, imb, buy, sell, vol, ratio, dir };
+  }
+  fillNotional(side, usd) { // 'buy' memakan ask, 'sell' memakan bid
+    const L = this.sorted(side === 'buy' ? 'a' : 'b');
+    let rem = usd, qty = 0, spent = 0;
+    for (const [px, q] of L) {
+      const take = Math.min(rem, px * q);
+      qty += take / px; spent += take; rem -= take;
+      if (rem <= 1e-9) break;
+    }
+    return qty > 0 ? { px: spent / qty, qty } : null;
+  }
+  fillQty(side, qty) {
+    const L = this.sorted(side === 'buy' ? 'a' : 'b');
+    if (!L.length) return null;
+    let rem = qty, cost = 0;
+    for (const [px, q] of L) {
+      const take = Math.min(rem, q);
+      cost += take * px; rem -= take;
+      if (rem <= 1e-12) break;
+    }
+    if (rem > 1e-12) cost += rem * L[L.length - 1][0]; // likuiditas habis: sisa di level terjauh
+    return { px: cost / qty, qty };
+  }
+  enter(dir, now) {
+    const f = this.fillNotional(dir > 0 ? 'buy' : 'sell', this.p.size);
+    if (!f) return;
+    const fee = f.px * f.qty * this.p.feeRate;
+    this.cash -= fee;
+    this.pos = { side: dir, qty: f.qty, entry: f.px, t: now, fee };
+  }
+  exit(reason, now) {
+    const pos = this.pos;
+    if (!pos) return;
+    const f = this.fillQty(pos.side > 0 ? 'sell' : 'buy', pos.qty);
+    if (!f) return;
+    const gross = pos.side * (f.px - pos.entry) * pos.qty;
+    const fee = f.px * pos.qty * this.p.feeRate;
+    this.cash += gross - fee;
+    this.closed.push({ t0: pos.t, t1: now, side: pos.side, entry: pos.entry, exit: f.px, qty: pos.qty,
+      pnl: gross - fee - pos.fee, fees: pos.fee + fee, reason, held: (now - pos.t) / 1000 });
+    this.pos = null; this.lastExit = now;
+  }
+  order(kind, dir, reason) {
+    this.pending = true;
+    this.schedule(this.p.latency, () => {
+      const now = this.clock();
+      if (kind === 'enter') { if (!this.pos) this.enter(dir, now); } else this.exit(reason, now);
+      this.pending = false;
+    });
+  }
+  tick(now) {
+    if (this.p.staleMs && now - this.lastMsg > this.p.staleMs) return null; // data basi: jangan trading
+    const m = this.metrics(now);
+    if (!m) return null;
+    const prevDir = this.dir; this.dir = m.dir;
+    if (m.dir !== 0 && prevDir !== m.dir) this.pendingFwd.push({ t: now, dir: m.dir, px: m.mid, done: {} });
+    this.pendingFwd = this.pendingFwd.filter(o => {
+      for (const h of HORIZONS) {
+        if (!(h in o.done) && now - o.t >= h * 1000) {
+          const r = o.dir * (m.mid / o.px - 1) * 1e4; // bps searah sinyal
+          o.done[h] = r; this.fwd[h].push(r);
+        }
+      }
+      return Object.keys(o.done).length < HORIZONS.length;
+    });
+    if (this.pos && !this.pending) {
+      const pnlPct = this.pos.side * (m.mid / this.pos.entry - 1) * 100;
+      const held = (now - this.pos.t) / 1000;
+      let why = null;
+      if (pnlPct >= this.p.tp) why = 'TP';
+      else if (pnlPct <= -this.p.sl) why = 'SL';
+      else if (held >= this.p.maxHold) why = 'waktu';
+      else if (this.p.exitOpp && m.dir === -this.pos.side) why = 'sinyal-balik';
+      if (why) this.order('exit', 0, why);
+    } else if (!this.pos && !this.pending && m.dir !== 0 && now - this.lastExit >= this.p.cooldown * 1000) {
+      this.order('enter', m.dir);
+    }
+    const unreal = this.pos ? this.pos.side * (m.mid - this.pos.entry) * this.pos.qty : 0;
+    const eq = this.cash + unreal;
+    this.peak = Math.max(this.peak, eq); this.maxDD = Math.max(this.maxDD, this.peak - eq);
+    this.curve.push([now, eq]); if (this.curve.length > 20000) this.curve.shift();
+    this.snaps.push([now, m.mid, m.spread, m.band, m.bu, m.au, m.imb, m.ratio, m.vol, m.dir, eq]);
+    if (this.snaps.length > 50000) this.snaps.shift();
+    this.last = Object.assign({}, m, { eq, unreal });
+    return this.last;
+  }
+  stats() {
+    const c = this.closed, n = c.length, wins = c.filter(x => x.pnl > 0).length;
+    const net = c.reduce((s, x) => s + x.pnl, 0), fees = c.reduce((s, x) => s + x.fees, 0);
+    const eq = this.last ? this.last.eq : this.cash;
+    const fw = {};
+    for (const h of HORIZONS) {
+      const a = this.fwd[h];
+      fw[h] = { n: a.length, mean: a.length ? a.reduce((s, x) => s + x, 0) / a.length : null,
+                hit: a.length ? a.filter(x => x > 0).length / a.length * 100 : null };
+    }
+    return { n, wins, winrate: n ? wins / n * 100 : null, net, fees, avg: n ? net / n : null, eq,
+             ret: (eq / this.p.equity0 - 1) * 100, maxDD: this.maxDD, fw, rtFeeBps: 2 * this.p.feeRate * 1e4 };
+  }
+}
+// ==== ENGINE END
+
+const $ = id => document.getElementById(id);
+const PRESET_VOL = { BTCUSDT: 300000, ETHUSDT: 150000, SOLUSDT: 50000 };
+let sim = null, ws = null, timer = null, hb = null, running = false;
+
+function readParams() {
+  const n = id => parseFloat($(id).value);
+  return { sym: $('sym').value, band: n('band'), imbThr: n('imbThr'), ratioThr: n('ratioThr'),
+    flowSec: n('flowSec'), minVol: n('minVol'), size: n('size'), equity0: n('equity0'),
+    feeRate: n('fee') / 100, latency: n('latency'), tp: n('tp'), sl: n('sl'), maxHold: n('maxHold'),
+    cooldown: n('cooldown'), exitOpp: $('exitOpp').checked, staleMs: 5000 };
+}
+const usd = (x, d = 2) => (x < 0 ? '-' : '') + '$' + Math.abs(x).toLocaleString('en-US', { minimumFractionDigits: d, maximumFractionDigits: d });
+const compact = x => { const a = Math.abs(x); return a >= 1e6 ? (x / 1e6).toFixed(2) + 'M' : a >= 1e3 ? (x / 1e3).toFixed(1) + 'K' : x.toFixed(0); };
+const cls = x => (x > 0 ? 'up' : x < 0 ? 'dn' : '');
+const setStatus = t => { $('status').textContent = '· ' + t; };
+
+function connect() {
+  const p = sim.p;
+  setStatus('menghubungkan ke Bybit…');
+  ws = new WebSocket('wss://stream.bybit.com/v5/public/linear');
+  ws.onopen = () => {
+    sim.bids.clear(); sim.asks.clear();
+    ws.send(JSON.stringify({ op: 'subscribe', args: ['orderbook.1000.' + p.sym, 'publicTrade.' + p.sym] }));
+    setStatus('tersambung');
+  };
+  ws.onmessage = ev => {
+    let m; try { m = JSON.parse(ev.data); } catch (e) { return; }
+    if (m.op === 'subscribe' && m.success === false) { setStatus('gagal subscribe: ' + m.ret_msg); return; }
+    sim.onMessage(m, Date.now());
+  };
+  ws.onclose = () => { if (running) { setStatus('terputus, mencoba lagi…'); setTimeout(() => { if (running) connect(); }, 3000); } };
+  ws.onerror = () => setStatus('error koneksi (jaringan atau browser mungkin memblokir Bybit)');
+}
+
+function start() {
+  if (running) return;
+  sim = new Sim(readParams());
+  running = true;
+  $('btnStart').disabled = true; $('btnStop').disabled = false;
+  connect();
+  timer = setInterval(() => { sim.tick(Date.now()); render(); }, 1000);
+  hb = setInterval(() => { if (ws && ws.readyState === 1) ws.send('{"op":"ping"}'); }, 20000);
+}
+function stop() {
+  running = false;
+  clearInterval(timer); clearInterval(hb);
+  if (ws) ws.close();
+  $('btnStart').disabled = false; $('btnStop').disabled = true;
+  setStatus('berhenti');
+}
+function resetAll() { stop(); sim = null; render(); setStatus(''); }
+
+function render() {
+  const s = sim && sim.stats(), m = sim && sim.last;
+  if (m) {
+    $('mid').textContent = m.mid.toLocaleString('en-US', { maximumFractionDigits: 4 });
+    $('spread').textContent = m.spread.toFixed(4);
+    $('bandEff').textContent = '±' + m.band.toFixed(3) + '%' + (m.band < sim.p.band ? ' (dibatasi kedalaman)' : '');
+    $('depth').textContent = compact(m.bu) + ' / ' + compact(m.au);
+    $('imb').textContent = m.imb.toFixed(1) + '%';
+    $('imbBar').style.width = m.imb.toFixed(1) + '%';
+    $('ratio').textContent = m.ratio.toFixed(1) + '%';
+    $('vol').textContent = compact(m.vol) + (m.vol < sim.p.minVol ? ' (di bawah minimum)' : '');
+    $('bias').innerHTML = m.dir > 0 ? '<span class="badge up">cenderung NAIK (tekanan beli)</span>'
+      : m.dir < 0 ? '<span class="badge dn">cenderung TURUN (tekanan jual)</span>' : '<span class="badge">netral</span>';
+    const pos = sim.pos;
+    $('posn').innerHTML = pos ? (pos.side > 0 ? 'LONG' : 'SHORT') + ' @ ' + pos.entry.toFixed(4) + ' · <span class="' + cls(m.unreal) + '">' + usd(m.unreal) + '</span>'
+      : (sim.pending ? 'order dikirim…' : 'tidak ada');
+  } else if (running) {
+    $('bias').innerHTML = '<span class="badge">menunggu data / data basi</span>';
+  }
+  if (s) {
+    $('eq').textContent = usd(s.eq);
+    $('ret').innerHTML = '<span class="' + cls(s.ret) + '">' + s.ret.toFixed(2) + '%</span>';
+    $('ntr').textContent = s.n + ' / ' + s.wins + (s.winrate !== null ? ' (' + s.winrate.toFixed(0) + '%)' : '');
+    $('net').innerHTML = '<span class="' + cls(s.net) + '">' + usd(s.net) + '</span>';
+    $('avg').textContent = s.avg === null ? '-' : usd(s.avg);
+    $('fees').textContent = usd(s.fees);
+    $('dd').textContent = usd(s.maxDD);
+    $('rtfee').textContent = s.rtFeeBps.toFixed(1);
+    $('fwd').innerHTML = [10, 30, 60].map(h => {
+      const f = s.fw[h];
+      return '<tr><td>' + h + ' dtk</td><td>' + f.n + '</td><td class="' + cls(f.mean) + '">' + (f.mean === null ? '-' : f.mean.toFixed(2)) + '</td><td>' + (f.hit === null ? '-' : f.hit.toFixed(0)) + '</td></tr>';
+    }).join('');
+    $('log').innerHTML = sim.closed.slice(-30).reverse().map(t =>
+      '<tr><td>' + new Date(t.t0).toLocaleTimeString() + '</td><td>' + (t.side > 0 ? 'LONG' : 'SHORT') + '</td><td>' + t.entry.toFixed(4) + '</td><td>' + t.exit.toFixed(4) +
+      '</td><td>' + t.reason + '</td><td>' + t.held.toFixed(0) + 's</td><td class="' + cls(t.pnl) + '">' + t.pnl.toFixed(2) + '</td></tr>').join('');
+  } else {
+    ['eq', 'ret', 'ntr', 'net', 'avg', 'fees', 'dd'].forEach(id => { $(id).textContent = '-'; });
+    $('fwd').innerHTML = ''; $('log').innerHTML = '';
+  }
+  drawCurve();
+}
+
+function drawCurve() {
+  const cv = $('chart'), g = cv.getContext('2d'), W = cv.width, H = cv.height;
+  g.clearRect(0, 0, W, H);
+  const c = sim ? sim.curve : [];
+  if (c.length < 2) return;
+  let lo = Infinity, hi = -Infinity;
+  for (const [, v] of c) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+  const base = sim.p.equity0; lo = Math.min(lo, base); hi = Math.max(hi, base);
+  const pad = (hi - lo) * 0.1 || 1; lo -= pad; hi += pad;
+  const t0 = c[0][0], t1 = c[c.length - 1][0] || t0 + 1;
+  const X = t => (t - t0) / ((t1 - t0) || 1) * (W - 10) + 5, Y = v => H - 8 - (v - lo) / (hi - lo) * (H - 16);
+  g.strokeStyle = '#223049'; g.beginPath(); g.moveTo(0, Y(base)); g.lineTo(W, Y(base)); g.stroke();
+  g.strokeStyle = '#5aa2ff'; g.lineWidth = 1.5; g.beginPath();
+  c.forEach(([t, v], i) => { if (i === 0) g.moveTo(X(t), Y(v)); else g.lineTo(X(t), Y(v)); });
+  g.stroke();
+  g.fillStyle = '#8fa0b8'; g.font = '11px sans-serif';
+  g.fillText(usd(hi, 0), 6, 12); g.fillText(usd(lo, 0), 6, H - 4);
+}
+
+function download(name, rows) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.map(r => r.join(',')).join('\n')], { type: 'text/csv' }));
+  a.download = name; a.click();
+}
+
+$('sym').addEventListener('change', () => { $('minVol').value = PRESET_VOL[$('sym').value]; });
+$('btnStart').addEventListener('click', start);
+$('btnStop').addEventListener('click', stop);
+$('btnReset').addEventListener('click', resetAll);
+$('btnTrades').addEventListener('click', () => {
+  if (!sim) return;
+  download('trades.csv', [['masuk', 'keluar', 'sisi', 'entry', 'exit', 'qty', 'pnl_bersih', 'biaya', 'alasan', 'tahan_detik']].concat(
+    sim.closed.map(t => [new Date(t.t0).toISOString(), new Date(t.t1).toISOString(), t.side > 0 ? 'long' : 'short', t.entry, t.exit, t.qty, t.pnl.toFixed(4), t.fees.toFixed(4), t.reason, t.held.toFixed(1)])));
+});
+$('btnSnaps').addEventListener('click', () => {
+  if (!sim) return;
+  download('snapshots.csv', [['ts', 'mid', 'spread', 'band_pct', 'bid_usd', 'ask_usd', 'imbalance_pct', 'taker_buy_pct', 'taker_vol_usd', 'sinyal', 'ekuitas']].concat(
+    sim.snaps.map(r => r.map((x, i) => (i === 0 ? new Date(x).toISOString() : typeof x === 'number' ? +x.toFixed(6) : x)))));
+});
+render();
+</script>
+</body>
+</html>
